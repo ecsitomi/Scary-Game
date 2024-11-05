@@ -1,10 +1,12 @@
 import pygame, math, sys, time, random
 
 pygame.init()
+pygame.mixer.init()
 
 info = pygame.display.Info()
 WIDTH, HEIGHT = info.current_w, info.current_h
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)  # Teljes képernyős mód
+pygame.display.set_caption('Scary Game') 
 clock = pygame.time.Clock()
 font = pygame.font.Font(None, 36)
 BLUE = (0, 0, 255)
@@ -12,6 +14,39 @@ WHITE = (255, 255, 255)
 GRAY = (50, 50, 50)
 GREEN = (0, 255, 0)
 #FOV = math.radians(60)  # Látómező sugara radiánban, végül nem használtuk
+
+bg_music='data/bg_music.mp3'
+sound2='data/sound2.mp3'
+sound3='data/sound3.mp3'
+beep='data/beep.mp3'
+sound4='data/sound4.mp3'
+walk='data/walk.mp3'
+end='data/end.mp3'
+sound1 = pygame.mixer.Sound(bg_music)
+sound2 = pygame.mixer.Sound(sound2)
+sound3 = pygame.mixer.Sound(sound3)
+sound4 = pygame.mixer.Sound(sound4)
+walk = pygame.mixer.Sound(walk)
+beep = pygame.mixer.Sound(beep)
+end = pygame.mixer.Sound(end)
+sound1.play(-1)
+sound2.stop()
+sound3.stop()
+sound4.stop()
+beep.stop()
+walk.stop()
+end.stop()
+pygame.mixer.set_num_channels(4)
+channel2 = pygame.mixer.Channel(1) #radar
+channel3 = pygame.mixer.Channel(2) #farkashang
+channel4 = pygame.mixer.Channel(3) #kislányhang
+endgame = pygame.image.load('data/endgame.jpg').convert_alpha()
+endgame = pygame.transform.scale(endgame, (WIDTH, HEIGHT))
+endgame_rect = endgame.get_rect(center=(WIDTH // 2, HEIGHT // 2))   
+screen_rect = screen.get_rect()
+endgame_rect.center = screen_rect.center
+
+last_song=False
 
 # Térkép
 world_map = [
@@ -120,8 +155,9 @@ def place_o():
 
     # Véletlenszerű koordináták generálása
     while True:
-        x = random.randint(0, width - 1)
         y = random.randint(0, height - 1)
+        width = len(world_map[y])
+        x = random.randint(0, width - 1)
 
         # Ellenőrizzük, hogy az adott hely üres-e
         if world_map[y][x] == ' ' and (x, y) not in o_positions:
@@ -142,7 +178,8 @@ def check_collision():
     for o in o_positions:
         if o == (player_tile_x, player_tile_y):
             o_positions.remove(o) 
-            score += 1  
+            score += 1 
+            channel4.play(sound4) #kislányhang
 
 # Függvény a régi O betűk eltávolítására
 def remove_old_o():
@@ -157,7 +194,7 @@ def remove_old_o():
 
 # Függvény a pontszám kirajzolására
 def draw_score(score):
-    score_text = font.render(f'Score: {score}', True, (255, 255, 255))  # Fehér színű szöveg
+    score_text = font.render(f'+ {50-score} points to open the Secret Level!', True, (255, 255, 255))  # Fehér színű szöveg
     screen.blit(score_text, (WIDTH - score_text.get_width() - 10, HEIGHT - score_text.get_height() - 10))  # Kirajzolás a jobb alsó sarokba
 
 # Függvény a véletlen radar megjelenítésére
@@ -236,6 +273,7 @@ def draw_compass():
     pygame.draw.polygon(screen, color if radar_type == 'C' else WHITE, east_points)
 
 # Függvény az eltelt idő megjelenítésére
+# Itt játszódnak le hangok is
 def draw_elapsed_time(start_time):
     current_time = time.time()
     elapsed_time = current_time - start_time  # Eltelt idő másodpercekben
@@ -249,12 +287,32 @@ def draw_elapsed_time(start_time):
     text_rect = text_surface.get_rect(center=(WIDTH // 2, 35))  
     screen.blit(text_surface, text_rect)  
 
+    #HANG
+    if seconds == 27 or seconds == 57: 
+        channel3.play(sound3) #farkashang
+
+def restart():
+    global player_x, player_y, score, o_positions, last_remove_time, radar_type, alert_triggered, alert_square_timer, alert_screen_timer, start_time
+    global radar_timer, last_o_time
+    player_x, player_y = TILE_SIZE * 1.5, TILE_SIZE * 2.5
+    score = 0
+    o_positions = []
+    last_remove_time = time.time()
+    radar_type = None
+    alert_triggered = False
+    alert_square_timer = None
+    alert_screen_timer = None
+    start_time = time.time()
+    radar_timer = time.time()
+    last_o_time = time.time()
+    main()
+
 # Fő ciklus
 def main():
-    global player_x, player_y, radar_type, alert_triggered, alert_square_timer, alert_screen_timer
+    global player_x, player_y, radar_type, alert_triggered, alert_square_timer, alert_screen_timer, last_song
     running = True
     radar_interval = 5  # Alapértelmezett radar megjelenítési idő
-    alert = random.randint(20, 40)  # Riasztási idő
+    alert = random.randint(90, 150)  # Riasztási idő
     start_time = time.time()  # Játék indításának ideje
     last_o_time = time.time()  # Utolsó O betű elhelyezési idő
     radar_timer = time.time()  # Az utolsó radar megjelenítési idő
@@ -286,12 +344,16 @@ def main():
         move_x, move_y = 0, 0
         if keys[pygame.K_UP]:      # Fel mozgás
             move_y -= 3
+            walk.play()
         if keys[pygame.K_DOWN]:    # Le mozgás
             move_y += 3
+            walk.play()
         if keys[pygame.K_LEFT]:    # Balra mozgás
             move_x -= 3
+            walk.play()
         if keys[pygame.K_RIGHT]:   # Jobbra mozgás
             move_x += 3
+            walk.play()
 
         # Kilépés a játékból
         if keys[pygame.K_ESCAPE]:  # ESC megnyomása kilépéshez
@@ -320,9 +382,10 @@ def main():
             radar_interval = 4  
 
         if current_time - radar_timer >= radar_interval:
+            channel2.play(beep) #radar hang
             show_radar() 
             radar_timer = current_time
-        # Ellenőrizze, hogy a csík megjelenítési ideje eltelt-e
+        # Ellenőrizze, hogy a radar csík megjelenítési ideje eltelt-e
         if current_time - radar_timer >= radar_display_time:
             radar_type = None  # Törölje a csíkot
 
@@ -364,7 +427,11 @@ def main():
 
         # Egész képernyő vörösre állítása 1 másodperc után
         if alert_triggered and alert_screen_timer and current_time >= alert_screen_timer:
-            screen.fill((255, 0, 0))  # Teljes vörös képernyő
+            end.play()
+            screen.fill((0, 0, 0))  # Teljes vörös képernyő
+            screen.blit(endgame, endgame_rect)
+            if keys[pygame.K_SPACE]:
+                restart()
 
         # Képernyő frissítése
         pygame.display.flip()
